@@ -1,0 +1,55 @@
+{
+  "name": "@gordela/api-generator",
+  "version": "1.1.0",
+  "description": "TypeScript API generator from Swagger/OpenAPI specifications with environment variable support",
+  "main": "dist/index.js",
+  "bin": {
+    "gordela-api-gen": "dist/cli.js",
+    "gapi-gen": "dist/cli.js"
+  },
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "templates",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "node test/test.js",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "typescript",
+    "api",
+    "generator",
+    "swagger",
+    "openapi",
+    "codegen",
+    "rest",
+    "client"
+  ],
+  "author": "Giorgi Gordiashvili <giorgi.gordiashvili@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giorgigordiashvili/api-generator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/giorgigordiashvili/api-generator/issues"
+  },
+  "homepage": "https://github.com/giorgigordiashvili/api-generator#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "prettier": "^3.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
