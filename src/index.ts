@@ -183,7 +183,7 @@ export class ApiGenerator {
   }
 
   private getTypeFromSchema(schema: any, definitions: Record<string, any>): string {
-    if (!schema) return 'any';
+    if (!schema) return 'unknown';
 
     if (schema.$ref) {
       const refName = schema.$ref.split('/').pop();
@@ -192,6 +192,75 @@ export class ApiGenerator {
         return pascalName;
       }
       return pascalName;
+    }
+
+    // Handle oneOf (union types)
+    if (schema.oneOf && Array.isArray(schema.oneOf)) {
+      const unionTypes = schema.oneOf.map((subSchema: any) => 
+        this.getTypeFromSchema(subSchema, definitions)
+      );
+      return unionTypes.join(' | ');
+    }
+
+    // Handle allOf (intersection types)
+    if (schema.allOf && Array.isArray(schema.allOf)) {
+      // For allOf, we often want to merge properties
+      let mergedProperties: any = {};
+      let mergedRequired: string[] = [];
+      let baseTypes: string[] = [];
+
+      for (const subSchema of schema.allOf) {
+        if (subSchema.$ref) {
+          const refName = subSchema.$ref.split('/').pop();
+          if (refName) {
+            const typeName = this.toPascalCase(refName);
+            baseTypes.push(typeName);
+          }
+        } else if (subSchema.properties) {
+          mergedProperties = { ...mergedProperties, ...subSchema.properties };
+          if (subSchema.required) {
+            mergedRequired = [...mergedRequired, ...subSchema.required];
+          }
+        }
+      }
+
+      // If we have base types and additional properties, create an intersection
+      if (baseTypes.length > 0 && Object.keys(mergedProperties).length > 0) {
+        const additionalProps = Object.entries(mergedProperties)
+          .map(([key, value]) => {
+            const isRequired = mergedRequired.includes(key);
+            const propType = this.getTypeFromSchema(value, definitions);
+            return `  ${key}${isRequired ? '' : '?'}: ${propType};`;
+          })
+          .join('\n');
+        
+        return `${baseTypes.join(' & ')} & {\n${additionalProps}\n}`;
+      }
+
+      // If only base types, return intersection
+      if (baseTypes.length > 0) {
+        return baseTypes.join(' & ');
+      }
+
+      // If only properties, return object type
+      if (Object.keys(mergedProperties).length > 0) {
+        const props = Object.entries(mergedProperties)
+          .map(([key, value]) => {
+            const isRequired = mergedRequired.includes(key);
+            const propType = this.getTypeFromSchema(value, definitions);
+            return `  ${key}${isRequired ? '' : '?'}: ${propType};`;
+          })
+          .join('\n');
+        return `{\n${props}\n}`;
+      }
+    }
+
+    // Handle anyOf (union types, similar to oneOf)
+    if (schema.anyOf && Array.isArray(schema.anyOf)) {
+      const unionTypes = schema.anyOf.map((subSchema: any) => 
+        this.getTypeFromSchema(subSchema, definitions)
+      );
+      return unionTypes.join(' | ');
     }
 
     if (schema.type === 'string') {
@@ -212,7 +281,7 @@ export class ApiGenerator {
     if (schema.type === 'array') {
       const itemType = this.getTypeFromSchema(schema.items, definitions);
       // Handle complex types in arrays by wrapping in parentheses if needed
-      if (itemType.includes(' | ')) {
+      if (itemType.includes(' | ') || itemType.includes(' & ')) {
         return `(${itemType})[]`;
       }
       return `${itemType}[]`;
@@ -238,6 +307,18 @@ export class ApiGenerator {
         return `{\n${props}\n}`;
       }
       return 'Record<string, any>';
+    }
+
+    // If no type is specified but has properties, treat as object
+    if (schema.properties) {
+      const props = Object.entries(schema.properties)
+        .map(([key, value]) => {
+          const isRequired = schema.required && schema.required.includes(key);
+          const propType = this.getTypeFromSchema(value, definitions);
+          return `  ${key}${isRequired ? '' : '?'}: ${propType};`;
+        })
+        .join('\n');
+      return `{\n${props}\n}`;
     }
 
     return 'any';
