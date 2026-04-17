@@ -141,6 +141,31 @@ export class ApiGenerator {
     return types;
   }
 
+  /**
+   * Recursively checks whether a schema (or any of its nested properties/items)
+   * contains a binary field. Used to decide whether an endpoint with both
+   * `application/json` and `multipart/form-data` declared should be generated
+   * as a file upload.
+   */
+  private schemaHasBinary(schema: any): boolean {
+    if (!schema || typeof schema !== 'object') return false;
+    if (schema.format === 'binary') return true;
+    if (schema.properties) {
+      for (const prop of Object.values(schema.properties)) {
+        if (this.schemaHasBinary(prop)) return true;
+      }
+    }
+    if (schema.items && this.schemaHasBinary(schema.items)) return true;
+    for (const key of ['allOf', 'oneOf', 'anyOf']) {
+      if (Array.isArray(schema[key])) {
+        for (const sub of schema[key]) {
+          if (this.schemaHasBinary(sub)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private extractTypesFromSchema(schema: any, definitions: Record<string, any>): Set<string> {
     const types = new Set<string>();
     
@@ -387,18 +412,41 @@ export class ApiGenerator {
               methodParams = paramTypes.join(', ');
             }
 
-            // Handle request body
+            // Handle request body.
+            //
+            // Content-type selection:
+            //   - If `multipart/form-data` is declared AND (no JSON variant
+            //     exists OR the multipart schema contains a binary field),
+            //     generate the parameter as `FormData`. Axios auto-detects
+            //     FormData instances and sets the correct Content-Type header
+            //     (including the multipart boundary), so no extra config is
+            //     needed in the generated call.
+            //   - Otherwise fall back to `application/json`.
             if (requestBody) {
-              const content = requestBody.content?.['application/json'];
-              if (content?.schema) {
-                const bodyType = this.getTypeFromSchema(content.schema, definitions);
-                
+              const contents = requestBody.content || {};
+              const jsonContent = contents['application/json'];
+              const multipartContent = contents['multipart/form-data'];
+
+              const multipartHasBinary =
+                multipartContent?.schema &&
+                this.schemaHasBinary(multipartContent.schema);
+              const useMultipart =
+                multipartContent && (!jsonContent || multipartHasBinary);
+
+              if (useMultipart) {
+                methodParams = methodParams
+                  ? `${methodParams}, data: FormData`
+                  : `data: FormData`;
+                requestData = ', data';
+              } else if (jsonContent?.schema) {
+                const bodyType = this.getTypeFromSchema(jsonContent.schema, definitions);
+
                 // Extract all types from the request body schema
-                const requestTypes = this.extractTypesFromSchema(content.schema, definitions);
+                const requestTypes = this.extractTypesFromSchema(jsonContent.schema, definitions);
                 requestTypes.forEach(type => usedTypes.add(type));
-                
-                if (content.schema.$ref) {
-                  const refName = content.schema.$ref.split('/').pop();
+
+                if (jsonContent.schema.$ref) {
+                  const refName = jsonContent.schema.$ref.split('/').pop();
                   if (refName) {
                     const typeName = this.toPascalCase(refName);
                     usedTypes.add(typeName);

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-04-17 (multipart/form-data support)
+
+### Added
+- **`multipart/form-data` request bodies are now generated.** Endpoints that declare a `multipart/form-data` content type are emitted with a `data: FormData` parameter. Axios auto-detects `FormData` instances and applies the correct `Content-Type` header (with boundary), so no extra per-call configuration is required.
+- New helper `schemaHasBinary()` recursively walks a schema (including `properties`, `items`, and `allOf`/`oneOf`/`anyOf` branches) to detect `format: binary` fields.
+
+### Changed
+- Request-body content-type selection now follows a clear rule:
+  - If `multipart/form-data` is declared **and** (no `application/json` variant exists **or** the multipart schema contains a binary field), the generator emits `data: FormData`.
+  - Otherwise it falls back to the previous `application/json` behavior.
+- When both `application/json` and `multipart/form-data` are declared (e.g., an endpoint that accepts a base64 string OR a real file), the generator now prefers the file-upload variant, which is almost always what the caller wants.
+
+### Fixed
+- File-upload endpoints that only declared `multipart/form-data` previously generated a zero-argument function (e.g., `uploadMedia(): Promise<…>`), silently dropping the request body. They now correctly accept the upload payload.
+
 ## [1.2.0] - 2025-06-16 (Complete Type Safety Enhancement)
 
 ### 🎉 Major Improvements

@@ -5,6 +5,7 @@ A powerful TypeScript API client generator that creates type-safe interfaces and
 ## Features
 
 - 🚀 **TypeScript-first**: Generates fully typed interfaces and API methods
+- 📎 **Multipart uploads**: Endpoints that declare `multipart/form-data` are emitted with `data: FormData` parameters — axios auto-detects `FormData` and sets the correct `Content-Type` boundary automatically
 - 🌍 **Environment Variables**: Full support for configuration via `.env` files
 - 🔧 **Flexible Configuration**: Multiple ways to configure (env vars, config files, CLI args)
 - 📦 **Production Ready**: Proper error handling, logging, and robust code generation
@@ -180,6 +181,31 @@ const newPlayer: Player = {
 
 const createdPlayer = await createPlayer(newPlayer);
 ```
+
+## File Uploads (multipart/form-data)
+
+When an endpoint declares `multipart/form-data` in its `requestBody.content`, the generator emits a `data: FormData` parameter instead of a typed JSON body:
+
+```typescript
+// OpenAPI spec declares multipart/form-data with a binary `media` field
+export async function uploadMedia(data: FormData): Promise<{
+  success?: boolean;
+  data?: { id?: number; url?: string; ... };
+}> {
+  const response = await axios.post(`/api/v1/core/media/upload`, data);
+  return response.data;
+}
+```
+
+Caller code:
+
+```typescript
+const formData = new FormData();
+formData.append('media', file); // File, Blob, or RN asset descriptor
+const res = await uploadMedia(formData);
+```
+
+No custom headers are required — axios inspects the body and sets `Content-Type: multipart/form-data; boundary=…` automatically. When an endpoint declares **both** `application/json` and `multipart/form-data`, the generator prefers multipart if any field has `format: binary` (which is almost always what a file-upload caller wants).
 
 ## Integration with Axios
 
