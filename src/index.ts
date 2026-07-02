@@ -288,10 +288,19 @@ export class ApiGenerator {
       return unionTypes.join(' | ');
     }
 
+    // Enums become literal unions regardless of their base type. Checked before
+    // the type-specific branches so an integer enum yields `1 | 2` rather than
+    // the widened `number`, and a string enum yields `'a' | 'b'`.
+    if (Array.isArray(schema.enum)) {
+      const isStringEnum = schema.type === 'string' || !schema.type;
+      return schema.enum
+        .map((e: any) => (isStringEnum ? `'${e}'` : `${e}`))
+        .join(' | ');
+    }
+
     if (schema.type === 'string') {
       if (schema.format === 'date-time') return 'string';
       if (schema.format === 'email') return 'string';
-      if (schema.enum) return schema.enum.map((e: string) => `'${e}'`).join(' | ');
       return 'string';
     }
 
@@ -310,14 +319,6 @@ export class ApiGenerator {
         return `(${itemType})[]`;
       }
       return `${itemType}[]`;
-    }
-
-    // Handle enum at the schema level (not just in string type)
-    if (schema.enum) {
-      if (schema.type === 'string' || !schema.type) {
-        return schema.enum.map((e: string) => `'${e}'`).join(' | ');
-      }
-      return schema.enum.join(' | ');
     }
 
     if (schema.type === 'object' || schema.properties) {
@@ -357,6 +358,15 @@ export class ApiGenerator {
         const interfaceName = this.toPascalCase(name);
         const properties = schema.properties || {};
         const required = schema.required || [];
+
+        // Enum component schemas (e.g. { enum: ['a','b'], type: 'string' }) have
+        // no `properties`. Emit a proper string/number union type alias instead
+        // of falling through to the `{ [key: string]: any }` object fallback,
+        // which produced an object type that no enum value could satisfy.
+        if (Array.isArray(schema.enum)) {
+          const unionType = this.getTypeFromSchema(schema, definitions);
+          return `export type ${interfaceName} = ${unionType};`;
+        }
 
         if (Object.keys(properties).length === 0) {
           return `export interface ${interfaceName} {\n  [key: string]: any;\n}`;
